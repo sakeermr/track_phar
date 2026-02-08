@@ -1,0 +1,232 @@
+# Pipeline Configuration File
+# Edit these values to customize your workflow
+
+# ============================================================================
+# INPUT/OUTPUT SETTINGS
+# ============================================================================
+
+[paths]
+# Input directory for chemical files
+input_dir = "input"
+
+# Output directory for all results
+output_dir = "output"
+
+# Temporary working directory
+work_dir = "temp"
+
+# Final results package directory
+results_dir = "results"
+
+# ============================================================================
+# TRAC SCREENING SETTINGS
+# ============================================================================
+
+[trac]
+# Number of top PDB targets to extract per chemical
+# Options: 5, 10, 15, 20
+# Higher = more comprehensive but longer runtime
+top_targets_per_chemical = 10
+
+# PDB ligand database file
+pdb_database = "pdb_ligands.csv"
+
+# Tanimoto similarity threshold (0.0 - 1.0)
+# Lower = more permissive matches
+similarity_threshold = 0.3
+
+# Maximum number of results per chemical
+max_results_per_chemical = 20
+
+# ============================================================================
+# PHARMACONET MODELING SETTINGS
+# ============================================================================
+
+[pharmaconet]
+# Enable CUDA acceleration (requires GPU)
+# Options: true, false
+use_cuda = false
+
+# Number of parallel modeling batches
+# More batches = faster but requires more CPU/memory
+# GitHub Actions default: 8
+num_parallel_batches = 8
+
+# Timeout per PDB modeling (seconds)
+# Increase for complex structures
+modeling_timeout = 600
+
+# Score threshold for pharmacophore features
+# Range: 0.0 - 1.0 (default: 0.5)
+score_threshold = 0.5
+
+# Download PDB structures automatically
+auto_download_pdb = true
+
+# ============================================================================
+# REVERSE SCREENING SETTINGS
+# ============================================================================
+
+[screening]
+# Number of CPUs for parallel screening
+# More CPUs = faster screening
+num_cpus = 4
+
+# Number of conformers to generate per molecule
+# More conformers = better accuracy but slower
+num_conformers = 10
+
+# Pharmacophore matching parameters
+# These affect scoring stringency
+
+## Weight for different pharmacophore features (0-10)
+# Higher weight = more important for matching
+weight_hydrophobic = 1
+weight_aromatic = 4
+weight_cation = 8
+weight_anion = 8
+weight_hbd = 4  # Hydrogen bond donor
+weight_hba = 4  # Hydrogen bond acceptor
+weight_halogen = 4
+
+# ============================================================================
+# REPORTING SETTINGS
+# ============================================================================
+
+[reporting]
+# Number of top hits to highlight in final report
+top_n_hits = 50
+
+# Generate per-chemical result files
+generate_per_chemical_reports = true
+
+# Generate per-PDB result files
+generate_per_pdb_reports = true
+
+# Include detailed statistics
+include_statistics = true
+
+# Generate visualization files
+generate_visualizations = true
+
+# ============================================================================
+# PERFORMANCE SETTINGS
+# ============================================================================
+
+[performance]
+# Maximum memory per job (GB)
+# Adjust based on available resources
+max_memory_gb = 8
+
+# Retry failed tasks
+retry_failed = true
+
+# Number of retries for failed tasks
+max_retries = 2
+
+# Enable progress bars
+show_progress = true
+
+# Enable verbose logging
+verbose_logging = false
+
+# ============================================================================
+# ARTIFACT SETTINGS
+# ============================================================================
+
+[artifacts]
+# Retention days for GitHub artifacts
+retention_days = 90
+
+# Compress artifacts for storage
+compress_artifacts = true
+
+# Include intermediate files in artifacts
+include_intermediate_files = false
+
+# ============================================================================
+# ORGANISM FILTERING
+# ============================================================================
+
+[organisms]
+# Filter PDB targets by organism
+# Options: all, human_only, human_mouse_rat
+
+filter_mode = "human_mouse_rat"
+
+# Prioritize specific organisms (leave empty for all)
+# Example: ["Homo sapiens", "Mus musculus"]
+priority_organisms = ["Homo sapiens"]
+
+# Exclude specific organisms
+# Example: ["Escherichia coli", "Saccharomyces cerevisiae"]
+exclude_organisms = []
+
+# ============================================================================
+# ADVANCED SETTINGS
+# ============================================================================
+
+[advanced]
+# Enable experimental features
+enable_experimental = false
+
+# Custom pharmacophore model weights file
+# Leave empty for default weights
+custom_weights_file = ""
+
+# Cache intermediate results
+enable_caching = true
+
+# Cache directory
+cache_dir = ".cache"
+
+# Debug mode (generates extra logging)
+debug_mode = false
+
+# Dry run (test without actual execution)
+dry_run = false
+
+# ============================================================================
+# NOTIFICATION SETTINGS (Optional)
+# ============================================================================
+
+[notifications]
+# Send email notifications on completion
+# Requires GitHub secrets: EMAIL_USERNAME, EMAIL_PASSWORD
+enable_email = false
+
+# Email recipients (comma-separated)
+email_recipients = ""
+
+# Send notifications on failure only
+notify_on_failure_only = false
+
+# ============================================================================
+# CUSTOM PARAMETERS
+# ============================================================================
+
+[custom]
+# Add your own custom parameters here
+# These will be passed to scripts as environment variables
+
+# Example:
+# my_custom_param = "value"
+# project_name = "cannabinoid_screening"
+# research_group = "SSC_R&D"
+
+# ============================================================================
+# NOTES
+# ============================================================================
+
+# This configuration file uses TOML format
+# 
+# To use this configuration:
+# 1. Edit the values above
+# 2. Commit changes to your repository
+# 3. The workflow will automatically use these settings
+#
+# For parameter descriptions and valid ranges, see:
+# INTEGRATED_PIPELINE_README.md
+
+# Last updated: 2026-02-08
+# Version: 2.0
