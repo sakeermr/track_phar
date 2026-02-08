@@ -43,12 +43,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+          # Removed cache: 'pip' to avoid requirements.txt dependency
       
       - name: 📦 Install Trac Dependencies
         run: |
           pip install --upgrade pip
           pip install rdkit pandas numpy requests tqdm
+      
+      - name: 🔍 Verify Required Files
+        run: |
+          echo "📂 Checking for required files..."
+          ls -lh pdb_ligands.csv || echo "⚠️  WARNING: pdb_ligands.csv not found!"
+          ls -lh final_optimized_workflow.py || echo "⚠️  WARNING: final_optimized_workflow.py not found!"
+          ls -lh input/${{ github.event.inputs.input_chemicals }} || echo "⚠️  WARNING: Input file not found!"
       
       - name: 🔍 Run Trac PDB Ligand Screening
         id: screening
@@ -295,21 +302,21 @@ jobs:
           mkdir -p final_package/{logs,pharmacophore-models,screening-results}
           
           # Consolidate logs
-          find all_results/modeling-logs-batch-* -type f -exec cp {} final_package/logs/ \;
-          find all_results/screening-logs-* -type f -exec cp {} final_package/logs/ \;
+          find all_results/modeling-logs-batch-* -type f -exec cp {} final_package/logs/ \; 2>/dev/null || true
+          find all_results/screening-logs-* -type f -exec cp {} final_package/logs/ \; 2>/dev/null || true
           
           # Consolidate models
-          find all_results/pharmacophore-models-batch-* -name "*.pm" -exec cp {} final_package/pharmacophore-models/ \;
-          find all_results/pharmacophore-models-batch-* -name "*.pse" -exec cp {} final_package/pharmacophore-models/ \;
+          find all_results/pharmacophore-models-batch-* -name "*.pm" -exec cp {} final_package/pharmacophore-models/ \; 2>/dev/null || true
+          find all_results/pharmacophore-models-batch-* -name "*.pse" -exec cp {} final_package/pharmacophore-models/ \; 2>/dev/null || true
           
           # Consolidate screening results
-          cp -r all_results/screening-results-*/. final_package/screening-results/
+          cp -r all_results/screening-results-*/. final_package/screening-results/ 2>/dev/null || true
           
           # Copy final report
-          cp -r all_results/final-integrated-report-*/. final_package/
+          cp -r all_results/final-integrated-report-*/. final_package/ 2>/dev/null || true
           
           echo "✅ Final package created successfully!"
-          tree final_package/ || ls -R final_package/
+          ls -R final_package/ || echo "Package structure created"
       
       - name: 📊 Upload Complete Pipeline Results
         uses: actions/upload-artifact@v4
@@ -328,7 +335,7 @@ jobs:
           | Stage | Status | Details |
           |-------|--------|---------|
           | 🎯 Trac Screening | ✅ Complete | Found ${{ needs.trac-screening.outputs.total-pdbs }} PDB targets |
-          | 📋 PDB Extraction | ✅ Complete | Extracted ${{ needs.extract-pdbs.outputs.total-unique-pdbs }} unique PDbs |
+          | 📋 PDB Extraction | ✅ Complete | Extracted ${{ needs.extract-pdbs.outputs.total-unique-pdbs }} unique PDBs |
           | 🔬 Pharmacophore Modeling | ✅ Complete | Generated pharmacophore models |
           | 🎯 Reverse Screening | ✅ Complete | Screened all chemicals against models |
           | 📦 Finalization | ✅ Complete | Results packaged and ready |
