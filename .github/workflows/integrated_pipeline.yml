@@ -69,7 +69,7 @@ jobs:
           
           # Count total PDBs extracted
           TOTAL_PDBS=$(grep -c "^PDB_ID" output/trac_screening_results.txt || echo "0")
-          echo "total_pdbs=$TOTAL_PDBS" >> $GITHUB_OUTPUT
+          echo "total_pdbs=${TOTAL_PDBS:-0}" >> $GITHUB_OUTPUT
           echo "completed=true" >> $GITHUB_OUTPUT
           echo "✅ Screening completed! Found $TOTAL_PDBS PDB targets"
       
