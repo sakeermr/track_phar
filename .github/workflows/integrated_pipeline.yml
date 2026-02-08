@@ -12,7 +12,11 @@ on:
         required: false
         default: '10'
         type: choice
-        options: ['5', '10', '15', '20']
+        options:
+          - '5'
+          - '10'
+          - '15'
+          - '20'
       enable_cuda:
         description: 'Enable CUDA acceleration for PharmacoNet'
         required: false
@@ -26,61 +30,56 @@ jobs:
   trac-screening:
     name: 🎯 Stage 1 - Trac PDB Screening
     runs-on: ubuntu-latest
-
+    
     outputs:
       screening-completed: ${{ steps.screening.outputs.completed }}
       total-pdbs: ${{ steps.screening.outputs.total_pdbs }}
-
+    
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python 3.9
+      
+      - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
-
+          python-version: '3.11'
+          # Removed cache: 'pip' to avoid requirements.txt dependency
+      
       - name: 📦 Install Trac Dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pandas numpy rdkit requests tqdm lxml openpyxl chardet matplotlib seaborn scipy
-
+          pip install --upgrade pip
+          pip install rdkit pandas numpy requests tqdm chardet
+      
       - name: 🔍 Verify Required Files
         run: |
-          ls -lh pdb_ligands.csv || echo "::warning:: pdb_ligands.csv not found!"
-          ls -lh final_optimized_workflow.py || ls -lh scripts/final_optimized_workflow.py || echo "::warning:: final_optimized_workflow.py not found!"
-          ls -lh input/${{ github.event.inputs.input_chemicals }} || echo "::warning:: Input chemicals file not found!"
-
-      - name: 🧬 Run Trac PDB Ligand Screening
+          echo "📂 Checking for required files..."
+          ls -lh pdb_ligands.csv || echo "⚠️  WARNING: pdb_ligands.csv not found!"
+          ls -lh final_optimized_workflow.py || echo "⚠️  WARNING: final_optimized_workflow.py not found!"
+          ls -lh input/${{ github.event.inputs.input_chemicals }} || echo "⚠️  WARNING: Input file not found!"
+      
+      - name: 🔍 Run Trac PDB Ligand Screening
         id: screening
         run: |
-          mkdir -p output
-          if [ -f "./final_optimized_workflow.py" ]; then
-            PY_SCRIPT="./final_optimized_workflow.py"
-          elif [ -f "./scripts/final_optimized_workflow.py" ]; then
-            PY_SCRIPT="./scripts/final_optimized_workflow.py"
-          else
-            echo "::error:: 'final_optimized_workflow.py' not found in root or scripts/"
-            exit 1
-          fi
-
-          python "$PY_SCRIPT" \
-            --input "input/${{ github.event.inputs.input_chemicals }}" \
+          echo "🚀 Starting Trac PDB Screening..."
+          python scripts/final_optimized_workflow.py \
+            --input input/${{ github.event.inputs.input_chemicals }} \
             --pdb pdb_ligands.csv \
-            --output "output/trac_screening_results.csv" \
-            --max-pdb 0 --max-input 0 --verbose
-
-          # Touch downstream artifact files if not produced
-          [ -f output/trac_screening_results.csv ] || touch output/trac_screening_results.csv
-
-          echo "total_pdbs=$(wc -l < output/trac_screening_results.csv)" >> $GITHUB_OUTPUT
+            --output output/trac_screening_results.txt \
+            --top_n ${{ github.event.inputs.num_targets_per_chemical }}
+          
+          # Count total PDBs extracted
+          TOTAL_PDBS=$(grep -c "^PDB_ID" output/trac_screening_results.txt || echo "0")
+          echo "total_pdbs=$TOTAL_PDBS" >> $GITHUB_OUTPUT
           echo "completed=true" >> $GITHUB_OUTPUT
-
+          echo "✅ Screening completed! Found $TOTAL_PDBS PDB targets"
+      
       - name: 📊 Upload Trac Screening Results
         uses: actions/upload-artifact@v4
         with:
           name: trac-screening-results
-          path: output/trac_screening_results.csv
+          path: |
+            output/trac_screening_results.txt
+            output/ssc_screening_results.csv
           retention-days: 30
 
   # ============================================================================
@@ -90,50 +89,44 @@ jobs:
     name: 📋 Stage 2 - Extract Top PDB Targets
     runs-on: ubuntu-latest
     needs: trac-screening
-
+    
     outputs:
       pdb-list: ${{ steps.extract.outputs.pdb_list }}
       total-unique-pdbs: ${{ steps.extract.outputs.total_unique }}
-
+    
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-
+      
       - name: 📥 Download Trac Results
         uses: actions/download-artifact@v4
         with:
           name: trac-screening-results
           path: output/
-
+      
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
-
+          python-version: '3.11'
+      
       - name: 🔍 Extract PDB IDs
         id: extract
         run: |
-          mkdir -p pharmaconet_input
-          PY_SCRIPT=""
-          if [ -f "./extract_top_pdbs.py" ]; then
-            PY_SCRIPT="./extract_top_pdbs.py"
-          elif [ -f "./scripts/extract_top_pdbs.py" ]; then
-            PY_SCRIPT="./scripts/extract_top_pdbs.py"
-          else
-            echo "::error:: 'extract_top_pdbs.py' not found in root or scripts/"
-            exit 1
-          fi
-
-          python "$PY_SCRIPT" \
-            --input output/trac_screening_results.csv \
+          python scripts/extract_top_pdbs.py \
+            --input output/trac_screening_results.txt \
             --output pharmaconet_input/pdb_list.txt \
             --top_n ${{ github.event.inputs.num_targets_per_chemical }}
-
+          
+          # Get unique PDB count
           UNIQUE_PDBS=$(sort pharmaconet_input/pdb_list.txt | uniq | wc -l)
           echo "total_unique=$UNIQUE_PDBS" >> $GITHUB_OUTPUT
+          
+          # Create comma-separated list for matrix
           PDB_LIST=$(cat pharmaconet_input/pdb_list.txt | tr '\n' ',' | sed 's/,$//')
           echo "pdb_list=$PDB_LIST" >> $GITHUB_OUTPUT
-
+          
+          echo "✅ Extracted $UNIQUE_PDBS unique PDB targets"
+      
       - name: 📊 Upload PDB List
         uses: actions/upload-artifact@v4
         with:
@@ -148,33 +141,34 @@ jobs:
     name: 🔬 Stage 3 - PharmacoNet Modeling
     runs-on: ubuntu-latest
     needs: extract-pdbs
-
+    
     strategy:
-      max-parallel: 8
+      max-parallel: 5
       fail-fast: false
       matrix:
         batch: [1, 2, 3, 4, 5, 6, 7, 8]
+    
     steps:
       - name: 📥 Checkout PharmacoNet Repository
         uses: actions/checkout@v4
         with:
           repository: sakeermr/Tracmypdb_pharmaconet_new
           path: pharmaconet
-
+      
       - name: 📥 Download PDB List
         uses: actions/download-artifact@v4
         with:
           name: pdb-target-list
           path: input/
-
+      
       - name: 🐍 Setup Conda Environment
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: '3.9'
+          python-version: '3.11'
           channels: conda-forge,defaults
           channel-priority: strict
-
+      
       - name: 📦 Install PharmacoNet
         shell: bash -el {0}
         run: |
@@ -182,7 +176,7 @@ jobs:
           conda install -y pymol-open-source -c conda-forge
           pip install torch rdkit biopython omegaconf tqdm numba molvoxel
           pip install .
-
+      
       - name: 🔬 Run Batch Pharmacophore Modeling
         shell: bash -el {0}
         run: |
@@ -194,14 +188,14 @@ jobs:
             --output_dir ../pharmacophore_models/ \
             --log_dir ../logs/modeling/ \
             ${{ github.event.inputs.enable_cuda && '--cuda' || '' }}
-
+      
       - name: 📊 Upload Pharmacophore Models (Batch ${{ matrix.batch }})
         uses: actions/upload-artifact@v4
         with:
           name: pharmacophore-models-batch-${{ matrix.batch }}
           path: pharmacophore_models/
           retention-days: 30
-
+      
       - name: 📝 Upload Modeling Logs (Batch ${{ matrix.batch }})
         uses: actions/upload-artifact@v4
         with:
@@ -216,38 +210,38 @@ jobs:
     name: 🎯 Stage 4 - Reverse Screening
     runs-on: ubuntu-latest
     needs: [trac-screening, pharmaconet-modeling]
-
+    
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-
+      
       - name: 📥 Download All Pharmacophore Models
         uses: actions/download-artifact@v4
         with:
           pattern: pharmacophore-models-batch-*
           path: pharmacophore_models/
           merge-multiple: true
-
+      
       - name: 📥 Download Trac Results
         uses: actions/download-artifact@v4
         with:
           name: trac-screening-results
           path: trac_results/
-
+      
       - name: 🐍 Setup Conda
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: '3.9'
+          python-version: '3.11'
           channels: conda-forge,defaults
-
+      
       - name: 📦 Install Dependencies
         shell: bash -el {0}
         run: |
           conda install -y pymol-open-source -c conda-forge
           pip install torch rdkit pandas numpy
           pip install git+https://github.com/SeonghwanSeo/PharmacoNet.git
-
+      
       - name: 🔄 Run Reverse Screening
         shell: bash -el {0}
         run: |
@@ -257,29 +251,29 @@ jobs:
             --output_dir screening_results/ \
             --log_dir logs/screening/ \
             --cpus 4
-
+      
       - name: 📊 Generate Summary Report
         shell: bash -el {0}
         run: |
           python scripts/generate_summary_report.py \
-            --trac_results trac_results/trac_screening_results.csv \
+            --trac_results trac_results/trac_screening_results.txt \
             --screening_results screening_results/ \
             --output final_report/
-
+      
       - name: 📊 Upload Screening Results
         uses: actions/upload-artifact@v4
         with:
           name: screening-results-${{ github.run_number }}
           path: screening_results/
           retention-days: 30
-
+      
       - name: 📝 Upload Screening Logs
         uses: actions/upload-artifact@v4
         with:
           name: screening-logs-${{ github.run_number }}
           path: logs/screening/
           retention-days: 30
-
+      
       - name: 📊 Upload Final Report
         uses: actions/upload-artifact@v4
         with:
@@ -294,49 +288,51 @@ jobs:
     name: 📦 Stage 5 - Finalize Results
     runs-on: ubuntu-latest
     needs: reverse-screening
-
+    
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-
+      
       - name: 📥 Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: all_results/
-
+      
       - name: 📦 Create Final Package
         run: |
           mkdir -p final_package/{logs,pharmacophore-models,screening-results}
-
+          
           # Consolidate logs
           find all_results/modeling-logs-batch-* -type f -exec cp {} final_package/logs/ \; 2>/dev/null || true
           find all_results/screening-logs-* -type f -exec cp {} final_package/logs/ \; 2>/dev/null || true
-
+          
           # Consolidate models
           find all_results/pharmacophore-models-batch-* -name "*.pm" -exec cp {} final_package/pharmacophore-models/ \; 2>/dev/null || true
           find all_results/pharmacophore-models-batch-* -name "*.pse" -exec cp {} final_package/pharmacophore-models/ \; 2>/dev/null || true
-
+          
           # Consolidate screening results
           cp -r all_results/screening-results-*/. final_package/screening-results/ 2>/dev/null || true
-
+          
           # Copy final report
           cp -r all_results/final-integrated-report-*/. final_package/ 2>/dev/null || true
-
+          
           echo "✅ Final package created successfully!"
           ls -R final_package/ || echo "Package structure created"
-
+      
       - name: 📊 Upload Complete Pipeline Results
         uses: actions/upload-artifact@v4
         with:
           name: complete-pipeline-results-${{ github.run_number }}
           path: final_package/
           retention-days: 90
-
+      
       - name: 📝 Generate Workflow Summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           # 🧬 Integrated Drug Discovery Pipeline Complete!
+          
           ## 📊 Pipeline Summary
+          
           | Stage | Status | Details |
           |-------|--------|---------|
           | 🎯 Trac Screening | ✅ Complete | Found ${{ needs.trac-screening.outputs.total-pdbs }} PDB targets |
@@ -344,16 +340,21 @@ jobs:
           | 🔬 Pharmacophore Modeling | ✅ Complete | Generated pharmacophore models |
           | 🎯 Reverse Screening | ✅ Complete | Screened all chemicals against models |
           | 📦 Finalization | ✅ Complete | Results packaged and ready |
-
+          
           ## 📦 Generated Artifacts
+          
           - **complete-pipeline-results-${{ github.run_number }}** - Complete integrated results
           - **logs/** - All processing logs
           - **pharmacophore-models/** - All .pm and .pse files
           - **screening-results/** - Interaction predictions and scores
-
+          
           ## 🔗 Download Results
+          
           Click on the artifacts section above to download the complete results package.
+          
           ---
-          **Pipeline Run:** ${{ github.run_number }}  
+          
+          **Pipeline Run ID:** ${{ github.run_number }}  
           **Triggered by:** ${{ github.actor }}  
+          **Date:** ${{ github.event.head_commit.timestamp }}
           EOF
