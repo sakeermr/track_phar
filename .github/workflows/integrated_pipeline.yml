@@ -48,7 +48,7 @@ jobs:
       - name: 📦 Install Trac Dependencies
         run: |
           pip install --upgrade pip
-          pip install rdkit pandas numpy requests tqdm
+          pip install rdkit pandas numpy requests tqdm chardet
       
       - name: 🔍 Verify Required Files
         run: |
