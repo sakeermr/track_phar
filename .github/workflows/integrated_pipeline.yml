@@ -61,7 +61,7 @@ jobs:
         id: screening
         run: |
           echo "🚀 Starting Trac PDB Screening..."
-          python final_optimized_workflow.py \
+          python scripts/final_optimized_workflow.py \
             --input input/${{ github.event.inputs.input_chemicals }} \
             --output output/trac_screening_results.txt \
             --top_n ${{ github.event.inputs.num_targets_per_chemical }}
