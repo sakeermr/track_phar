@@ -43,7 +43,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          # Removed cache: 'pip' to avoid requirements.txt dependency
       
       - name: 📦 Install Trac Dependencies
         run: |
@@ -61,14 +60,22 @@ jobs:
         id: screening
         run: |
           echo "🚀 Starting Trac PDB Screening..."
-          python scripts/final_optimized_workflow.py \
+          
+          # Run with correct arguments
+          python final_optimized_workflow.py \
             --input input/${{ github.event.inputs.input_chemicals }} \
             --pdb pdb_ligands.csv \
             --output output/trac_screening_results.txt \
-            --top_n ${{ github.event.inputs.num_targets_per_chemical }}
+            --max-pdb ${{ github.event.inputs.num_targets_per_chemical }} \
+            --verbose
           
           # Count total PDBs extracted
-          TOTAL_PDBS=$(grep -c "^PDB_ID" output/trac_screening_results.txt || echo "0")
+          if [ -f output/trac_screening_results.txt ]; then
+            TOTAL_PDBS=$(grep -c "PDB_ID" output/trac_screening_results.txt || echo "0")
+          else
+            TOTAL_PDBS=0
+          fi
+          
           echo "total_pdbs=$TOTAL_PDBS" >> $GITHUB_OUTPUT
           echo "completed=true" >> $GITHUB_OUTPUT
           echo "✅ Screening completed! Found $TOTAL_PDBS PDB targets"
@@ -79,7 +86,7 @@ jobs:
           name: trac-screening-results
           path: |
             output/trac_screening_results.txt
-            output/ssc_screening_results.csv
+            output/*.csv
           retention-days: 30
 
   # ============================================================================
@@ -109,9 +116,15 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: 📦 Install Dependencies
+        run: |
+          pip install pandas
+      
       - name: 🔍 Extract PDB IDs
         id: extract
         run: |
+          mkdir -p pharmaconet_input
+          
           python scripts/extract_top_pdbs.py \
             --input output/trac_screening_results.txt \
             --output pharmaconet_input/pdb_list.txt \
@@ -181,6 +194,8 @@ jobs:
         shell: bash -el {0}
         run: |
           cd pharmaconet
+          mkdir -p ../pharmacophore_models ../logs/modeling
+          
           python scripts/batch_modeling_parallel.py \
             --pdb_list ../input/pdb_list.txt \
             --batch_num ${{ matrix.batch }} \
@@ -245,6 +260,8 @@ jobs:
       - name: 🔄 Run Reverse Screening
         shell: bash -el {0}
         run: |
+          mkdir -p screening_results logs/screening
+          
           python scripts/reverse_screening_batch.py \
             --models_dir pharmacophore_models/ \
             --chemicals_file input/${{ github.event.inputs.input_chemicals }} \
@@ -255,6 +272,8 @@ jobs:
       - name: 📊 Generate Summary Report
         shell: bash -el {0}
         run: |
+          mkdir -p final_report
+          
           python scripts/generate_summary_report.py \
             --trac_results trac_results/trac_screening_results.txt \
             --screening_results screening_results/ \
